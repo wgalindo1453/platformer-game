@@ -1,4 +1,4 @@
-# Platformer Game
+# Zombie Platformer Game
 
 ![Game Screenshot](platformerZombieGame.gif)
 
@@ -41,5 +41,5 @@ A 2D platformer game developed using Go and Raylib. In this game, the player can
 
 1. Clone this repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/wgalindo1453/platformer-game.git
    cd platformer-game
