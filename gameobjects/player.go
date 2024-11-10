@@ -49,6 +49,7 @@ type Player struct {
 	RestingFrames         []rl.Texture2D // Frames for resting animation
 	SleepingFrames        []rl.Texture2D // Frames for sleeping animation
 	Bullets               []*Bullet      // Add bullets slice
+	switchDown			   bool // Indicates when to start descending
 
 	// Sounds
 	WalkSound  rl.Sound
@@ -226,6 +227,7 @@ func InitPlayer(worldWidth, worldHeight int) {
 	}
 
 }
+/***********************************STATES*********************************************** */
 
 func (p *Player) setState(state PlayerState) {
 	if p.State != state {
@@ -246,7 +248,10 @@ func (p *Player) setState(state PlayerState) {
 	}
 }
 
+/***********************************UPDATE*********************************************** */
+
 func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
+	fmt.Println("players starting out y position: ", p.Position.Y)
 
 	// Update bullets
 	for _, bullet := range p.Bullets {
@@ -277,27 +282,47 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 		}
 	}
 	p.Bullets = activeBullets
+// Check if player is on the ground
+onGround := p.Position.Y >= float32(worldHeight)-p.Height
 
-	// Check if player is on the ground
-	onGround := p.Position.Y >= float32(worldHeight)-p.Height
-	if onGround {
-		// fmt.Println("Player is on the ground")
-	}
+// Apply gravity and handle jumping
+if !onGround || p.State == Jumping {
+    // Print player's position for debugging
+    fmt.Println("Player Y Position:", p.Position.Y)
 
-	// Applying gravity if player is in the air
-	if !onGround || p.State == Jumping {
-		p.Speed.Y += gravity
-		p.Position.Y += p.Speed.Y
-	}
+    // Apply gravity effect based on ascending or descending state
+    if p.Speed.Y < 0 && !p.switchDown { // Ascending
+        fmt.Println("Ascending")
 
-	// landing handler
-	if p.Position.Y >= float32(worldHeight)-p.Height {
-		p.Position.Y = float32(worldHeight) - p.Height
-		p.Speed.Y = 0
-		if p.State == Jumping {
-			p.setState(Idle) // Resetting to Idle after landing
-		}
-	}
+        // Switch to descending if near the apex
+        if p.Speed.Y >= -0.5 { // Lower threshold for more gradual transition
+            fmt.Println("Switching down")
+            p.switchDown = true
+        }
+        p.Speed.Y += gravity * 0.000001 // Reduce gravity effect while ascending
+    } else { // Descending
+        p.Speed.Y += gravity * 0.005 // Normal gravity effect for descent
+    }
+
+    // Update the player's vertical position with the adjusted speed
+    p.Position.Y += p.Speed.Y
+}
+
+// If player is grounded and was jumping, reset to Idle and reset switchDown
+if p.Position.Y >= float32(worldHeight)-p.Height {
+    p.Position.Y = float32(worldHeight) - p.Height
+    p.Speed.Y = 0
+    p.switchDown = false // Reset switchDown for the next jump
+    if p.State == Jumping {
+        p.setState(Idle) // Reset to Idle after landing
+    }
+}
+
+
+
+
+
+
 
 	// Player state logic based on key inputs, prioritizing crouching
 	switch {
@@ -323,10 +348,41 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 			rl.StopSound(p.WalkSound)
 		}
 
-	case rl.IsKeyPressed(rl.KeySpace) && onGround:
-		// Jump initiation
-		p.setState(Jumping)
-		p.Speed.Y = jumpVelocity
+	// When initiating the jump, set a lower initial speed
+case rl.IsKeyPressed(rl.KeySpace) && onGround:
+    // Jump initiation
+    p.setState(Jumping)
+    p.Speed.Y = -2.0 // Lower initial jump speed for a shorter jump
+    fmt.Println("Jumping")
+
+// Apply gravity and handle jumping
+if !onGround || p.State == Jumping {
+    // Print player's position for debugging
+    fmt.Println(p.Position.Y)
+
+    if p.Speed.Y < 0 && !p.switchDown { // Ascending
+        fmt.Println("Ascending")
+        if p.Speed.Y > -0.1 {
+            fmt.Println("Switching down")
+            p.switchDown = true
+        }
+        p.Speed.Y += p.Acceleration.Y * 0.001 // Maintain slow upward deceleration
+    } else { // Descending
+        p.Speed.Y += p.Acceleration.Y * 0.1 // Slightly faster but controlled descent
+    }
+    p.Position.Y += p.Speed.Y
+}
+
+// If player lands on the ground, reset to Idle and reset switchDown
+if p.Position.Y >= float32(worldHeight)-p.Height {
+    p.Position.Y = float32(worldHeight) - p.Height
+    p.Speed.Y = 0
+    p.switchDown = false // Reset switchDown for the next jump
+    if p.State == Jumping {
+        p.setState(Idle) // Reset to Idle after landing
+    }
+}
+
 
 	case rl.IsMouseButtonDown(rl.MouseLeftButton) && p.State != Sitting && p.State != SittingShooting:
 		// Shooting (no horizontal movement)
@@ -443,6 +499,8 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 		p.FrameCounter = 0
 	}
 }
+
+/***********************************DRAW*********************************************** */
 
 func (p *Player) Draw() {
 	var frame rl.Texture2D
