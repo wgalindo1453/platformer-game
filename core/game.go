@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -29,6 +30,9 @@ const (
 	miniMapY      = 10
 	deadZoneWidth = 200
 )
+var (
+	testItem gameobjects.WorldItem
+)
 
 func InitGame(worldWidth, worldHeight int) {
 	background = rl.LoadTexture("assets/levelonebg.png")
@@ -45,6 +49,10 @@ func InitGame(worldWidth, worldHeight int) {
 		Offset: rl.NewVector2(float32(screenWidth)/2, float32(screenHeight)/2),
 		Zoom:   1.0,
 	}
+
+	testItem = gameobjects.NewWorldItem(110, 1040, gameobjects.Weapon, "Sword", "assets/sword.png")
+
+
 }
 
 // Initializing zombies with random positions
@@ -62,6 +70,13 @@ func initZombies(numZombies int) {
 }
 
 func UpdateGame(worldHeight int) {
+
+	// Toggle inventory display with 'I' key
+	if rl.IsKeyPressed(rl.KeyI) {
+		gameobjects.PlayerInstance.Inventory.IsOpen = !gameobjects.PlayerInstance.Inventory.IsOpen
+	}
+
+	
 	// Updating player and call Shoot to check for zombie hits
 	gameobjects.PlayerInstance.Update(worldHeight, worldWidth, zombies)
 	gameobjects.PlayerInstance.Shoot() // Call Shoot to check for zombie hits
@@ -72,6 +87,7 @@ func UpdateGame(worldHeight int) {
 	for i := len(zombies) - 1; i >= 0; i-- {
 		zombies[i].Update(worldWidth, playerPosition)
 		if !zombies[i].IsAlive && zombies[i].State == gameobjects.ZombieDead && zombies[i].CurrentFrame == len(zombies[i].DeadFrames)-1 {
+			zombies[i].UnloadSounds() // Unload zombie sounds once dead
 			// Remove zombie once dead animation completes
 			zombies = append(zombies[:i], zombies[i+1:]...)
 		}
@@ -118,6 +134,7 @@ func DrawGame() {
 	// Drawing game world with camera
 	rl.BeginMode2D(camera)
 	rl.DrawTexture(background, 0, 0, rl.White)
+	testItem.Draw() // Ensure this line is here
 	gameobjects.PlayerInstance.Draw()
 
 	// Draw each zombie in the zombies slice
@@ -126,10 +143,66 @@ func DrawGame() {
 	}
 	rl.EndMode2D()
 
-	
+	// Draw inventory if open
+	if gameobjects.PlayerInstance.Inventory.IsOpen {
+		DrawInventory(&gameobjects.PlayerInstance.Inventory)
+	}
+
+	// Draw the item in the game world
+	if testItem.Texture.ID != 0 {
+		testItem.Draw()
+	}
+
+	DrawPlayerHealthBar()
+
 	DrawMiniMap()
 
 	rl.EndDrawing()
+}
+
+// DrawInventory renders the inventory on the screen
+func DrawInventory(inv *gameobjects.Inventory) {
+	invX, invY := 100, 100 // Position of the inventory on the screen
+	slotSize := 50
+	padding := 10
+
+	for i, item := range inv.Slots {
+		x := invX + (i % 5) * (slotSize + padding) // Arrange items in a grid
+		y := invY + (i / 5) * (slotSize + padding)
+		rl.DrawRectangle(int32(x), int32(y), int32(slotSize), int32(slotSize), rl.Gray)
+
+		if item.Type != gameobjects.Other {
+			// Draw item icon
+			rl.DrawTexture(item.Image, int32(x), int32(y), rl.White)
+		}
+	}
+}
+
+func DrawPlayerHealthBar() {
+	player := &gameobjects.PlayerInstance
+	healthBarWidth := 200.0
+	healthBarHeight := 20.0
+	healthPercent := player.Health / player.MaxHealth
+
+	// Background of health bar
+	rl.DrawRectangle(
+		20, 20, // Fixed position in top-left corner of screen
+		int32(healthBarWidth),
+		int32(healthBarHeight),
+		rl.DarkGray,
+	)
+
+	// Actual health level
+	rl.DrawRectangle(
+		20, 20,
+		int32(healthBarWidth*healthPercent),
+		int32(healthBarHeight),
+		rl.Red,
+	)
+
+	// Optional: Add health text on the bar
+	healthText := fmt.Sprintf("Health: %.0f/%.0f", player.Health, player.MaxHealth)
+	rl.DrawText(healthText, 30, 25, 10, rl.White)
 }
 
 // Utility function to clamp an integer within a range

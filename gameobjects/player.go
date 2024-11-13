@@ -20,6 +20,7 @@ const (
 	Jumping
 	Resting
 	Sleeping
+	Dying
 )
 const (
 	jumpVelocity = -5.0 // Initial upward velocity for jumping
@@ -48,13 +49,19 @@ type Player struct {
 	JumpFrames            []rl.Texture2D // Frames for jumping animation
 	RestingFrames         []rl.Texture2D // Frames for resting animation
 	SleepingFrames        []rl.Texture2D // Frames for sleeping animation
+	DyingFrames           []rl.Texture2D // Frames for dying animation
 	Bullets               []*Bullet      // Add bullets slice
-	switchDown			   bool // Indicates when to start descending
+	switchDown            bool           // Indicates when to start descending
 
 	// Sounds
 	WalkSound  rl.Sound
 	RunSound   rl.Sound
 	ShootSound rl.Sound
+
+	// New attributes
+	Health    float64 // Player health
+	MaxHealth float64 // Maximum health to keep track for the health bar
+	Inventory  Inventory
 }
 
 func (p *Player) Shoot() {
@@ -69,6 +76,10 @@ func (p *Player) Shoot() {
 			rl.PlaySound(p.ShootSound)
 		}
 	}
+}
+func (p *Player) IsGameOver() bool {
+
+	return p.Health <= 0
 }
 
 func (p *Player) Unload() {
@@ -106,6 +117,9 @@ func InitPlayer(worldWidth, worldHeight int) {
 		FrameCounter: 0,
 		State:        Idle,
 		FacingRight:  true,
+		Health:       100, // Initialize with full health
+		MaxHealth:    100, // Set maximum health
+		Inventory: NewInventory(10), // Initialize with 10 slots
 	}
 	// Load sounds
 	PlayerInstance.WalkSound = rl.LoadSound("assets/sounds/walking.mp3")
@@ -226,7 +240,20 @@ func InitPlayer(worldWidth, worldHeight int) {
 		PlayerInstance.SleepingFrames = append(PlayerInstance.SleepingFrames, spriteSheet2.ImageAt(frame, rl.Blank))
 	}
 
+	//Dying frames
+	dyingFrames := []rl.Rectangle{
+		{X: 315, Y: 952, Width: 92, Height: 128},
+		{X: 504, Y: 943, Width: 94, Height: 137},
+		{X: 651, Y: 984, Width: 128, Height: 96},
+		{X: 814, Y: 1041, Width: 160, Height: 39},
+	}
+
+	for _, frame := range dyingFrames {
+		PlayerInstance.DyingFrames = append(PlayerInstance.DyingFrames, spriteSheet2.ImageAt(frame, rl.Blank))
+	}
+
 }
+
 /***********************************STATES*********************************************** */
 
 func (p *Player) setState(state PlayerState) {
@@ -238,20 +265,20 @@ func (p *Player) setState(state PlayerState) {
 
 	// Reset timers when changing to idle, resting, or sleeping states
 	if state == Idle {
-		p.IdleTimer = time.Now()  
-		p.RestTimer = time.Time{} 
+		p.IdleTimer = time.Now()
+		p.RestTimer = time.Time{}
 	} else if state == Resting {
-		p.RestTimer = time.Now() 
+		p.RestTimer = time.Now()
 	} else {
-		p.IdleTimer = time.Time{} 
-		p.RestTimer = time.Time{} 
+		p.IdleTimer = time.Time{}
+		p.RestTimer = time.Time{}
 	}
 }
 
 /***********************************UPDATE*********************************************** */
 
 func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
-	fmt.Println("players starting out y position: ", p.Position.Y)
+	// fmt.Println("players starting out y position: ", p.Position.Y)
 
 	// Update bullets
 	for _, bullet := range p.Bullets {
@@ -261,8 +288,8 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 			// Here we are checking if bullet hits any zombie
 			for _, zombie := range zombies {
 				if zombie.IsAlive && rl.CheckCollisionPointCircle(bullet.Position, zombie.Position, zombie.Width/2) {
-					zombie.TakeDamage(20)   // Adjust damage as needed
-					bullet.IsActive = false 
+					zombie.TakeDamage(20) // Adjust damage as needed
+					bullet.IsActive = false
 					break
 				}
 			}
@@ -274,6 +301,9 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 		}
 	}
 
+	//print inventory
+	fmt.Println("Inventory:", p.Inventory)
+
 	// Filter out inactive bullets
 	activeBullets := p.Bullets[:0]
 	for _, bullet := range p.Bullets {
@@ -282,47 +312,43 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 		}
 	}
 	p.Bullets = activeBullets
-// Check if player is on the ground
-onGround := p.Position.Y >= float32(worldHeight)-p.Height
+	// Check if player is on the ground
+	onGround := p.Position.Y >= float32(worldHeight)-p.Height
 
-// Apply gravity and handle jumping
-if !onGround || p.State == Jumping {
-    // Print player's position for debugging
-    fmt.Println("Player Y Position:", p.Position.Y)
+	// Apply gravity and handle jumping
+	if !onGround || p.State == Jumping {
+		// Print player's position for debugging
+		// fmt.Println("Player Y Position:", p.Position.Y)
 
-    // Apply gravity effect based on ascending or descending state
-    if p.Speed.Y < 0 && !p.switchDown { // Ascending
-        fmt.Println("Ascending")
+		// Apply gravity effect based on ascending or descending state
+		if p.Speed.Y < 0 && !p.switchDown { // Ascending
+			fmt.Println("Ascending")
 
-        // Switch to descending if near the apex
-        if p.Speed.Y >= -0.5 { // Lower threshold for more gradual transition
-            fmt.Println("Switching down")
-            p.switchDown = true
-        }
-        p.Speed.Y += gravity * 0.000001 // Reduce gravity effect while ascending
-    } else { // Descending
-        p.Speed.Y += gravity * 0.005 // Normal gravity effect for descent
-    }
+			// Switch to descending if near the apex
+			if p.Speed.Y >= -0.5 { // Lower threshold for more gradual transition
+				fmt.Println("Switching down")
+				p.switchDown = true
+			}
+			p.Speed.Y += gravity * 0.000001 // Reduce gravity effect while ascending
+		} else { // Descending
+			p.Speed.Y += gravity * 0.005 // Normal gravity effect for descent
+		}
 
-    // Update the player's vertical position with the adjusted speed
-    p.Position.Y += p.Speed.Y
-}
-
-// If player is grounded and was jumping, reset to Idle and reset switchDown
-if p.Position.Y >= float32(worldHeight)-p.Height {
-    p.Position.Y = float32(worldHeight) - p.Height
-    p.Speed.Y = 0
-    p.switchDown = false // Reset switchDown for the next jump
-    if p.State == Jumping {
-        p.setState(Idle) // Reset to Idle after landing
-    }
-}
+		// Update the player's vertical position with the adjusted speed
+		p.Position.Y += p.Speed.Y
 
 
+	}
 
-
-
-
+	// If player is grounded and was jumping, reset to Idle and reset switchDown
+	if p.Position.Y >= float32(worldHeight)-p.Height {
+		p.Position.Y = float32(worldHeight) - p.Height
+		p.Speed.Y = 0
+		p.switchDown = false // Reset switchDown for the next jump
+		if p.State == Jumping {
+			p.setState(Idle) // Reset to Idle after landing
+		}
+	}
 
 	// Player state logic based on key inputs, prioritizing crouching
 	switch {
@@ -348,41 +374,40 @@ if p.Position.Y >= float32(worldHeight)-p.Height {
 			rl.StopSound(p.WalkSound)
 		}
 
-	// When initiating the jump, set a lower initial speed
-case rl.IsKeyPressed(rl.KeySpace) && onGround:
-    // Jump initiation
-    p.setState(Jumping)
-    p.Speed.Y = -2.0 // Lower initial jump speed for a shorter jump
-    fmt.Println("Jumping")
+		// When initiating the jump, set a lower initial speed
+	case rl.IsKeyPressed(rl.KeySpace) && onGround:
+		// Jump initiation
+		p.setState(Jumping)
+		p.Speed.Y = -2.0 // Lower initial jump speed for a shorter jump
+		fmt.Println("Jumping")
 
-// Apply gravity and handle jumping
-if !onGround || p.State == Jumping {
-    // Print player's position for debugging
-    fmt.Println(p.Position.Y)
+		// Apply gravity and handle jumping
+		if !onGround || p.State == Jumping {
+			// Print player's position for debugging
+			fmt.Println(p.Position.Y)
 
-    if p.Speed.Y < 0 && !p.switchDown { // Ascending
-        fmt.Println("Ascending")
-        if p.Speed.Y > -0.1 {
-            fmt.Println("Switching down")
-            p.switchDown = true
-        }
-        p.Speed.Y += p.Acceleration.Y * 0.001 // Maintain slow upward deceleration
-    } else { // Descending
-        p.Speed.Y += p.Acceleration.Y * 0.1 // Slightly faster but controlled descent
-    }
-    p.Position.Y += p.Speed.Y
-}
+			if p.Speed.Y < 0 && !p.switchDown { // Ascending
+				fmt.Println("Ascending")
+				if p.Speed.Y > -0.1 {
+					fmt.Println("Switching down")
+					p.switchDown = true
+				}
+				p.Speed.Y += p.Acceleration.Y * 0.001 // Maintain slow upward deceleration
+			} else { // Descending
+				p.Speed.Y += p.Acceleration.Y * 0.1 // Slightly faster but controlled descent
+			}
+			p.Position.Y += p.Speed.Y
+		}
 
-// If player lands on the ground, reset to Idle and reset switchDown
-if p.Position.Y >= float32(worldHeight)-p.Height {
-    p.Position.Y = float32(worldHeight) - p.Height
-    p.Speed.Y = 0
-    p.switchDown = false // Reset switchDown for the next jump
-    if p.State == Jumping {
-        p.setState(Idle) // Reset to Idle after landing
-    }
-}
-
+		// If player lands on the ground, reset to Idle and reset switchDown
+		if p.Position.Y >= float32(worldHeight)-p.Height {
+			p.Position.Y = float32(worldHeight) - p.Height
+			p.Speed.Y = 0
+			p.switchDown = false // Reset switchDown for the next jump
+			if p.State == Jumping {
+				p.setState(Idle) // Reset to Idle after landing
+			}
+		}
 
 	case rl.IsMouseButtonDown(rl.MouseLeftButton) && p.State != Sitting && p.State != SittingShooting:
 		// Shooting (no horizontal movement)
@@ -489,6 +514,9 @@ if p.Position.Y >= float32(worldHeight)-p.Height {
 	case Sleeping:
 		frames = p.SleepingFrames
 		frameDelay = 5000
+	case Dying:
+		frames = p.DyingFrames
+		frameDelay = 10000
 	default:
 		frames = p.IdleFrames
 	}
@@ -503,6 +531,7 @@ if p.Position.Y >= float32(worldHeight)-p.Height {
 /***********************************DRAW*********************************************** */
 
 func (p *Player) Draw() {
+
 	var frame rl.Texture2D
 	switch p.State {
 	case Walking:
@@ -521,6 +550,8 @@ func (p *Player) Draw() {
 		frame = p.RestingFrames[p.CurrentFrame]
 	case Sleeping:
 		frame = p.SleepingFrames[p.CurrentFrame]
+	case Dying:
+		frame = p.DyingFrames[p.CurrentFrame]
 	default:
 		frame = p.IdleFrames[p.CurrentFrame]
 	}

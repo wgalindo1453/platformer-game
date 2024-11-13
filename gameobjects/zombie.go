@@ -1,11 +1,13 @@
 package gameobjects
 
 import (
-	"time"
+	"fmt"
 	"platformer-game/rendering"
+	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
+var gameOver bool // Variable to track game over state
 
 type ZombieState int
 
@@ -24,6 +26,14 @@ const (
 	followRange      = 300.0           // Range within which zombie will follow the player
 )
 
+
+var lastIdleSoundTime time.Time // Global cooldown for zombie idle sound
+var isIdleSoundPlaying bool     // Global flag to check if idle sound is currently playing
+
+const idleSoundCooldown = 5 * time.Second // Cooldown duration for the idle sound
+const idleSoundProximityRange = 200       // Range within which idle sound plays
+
+
 type Zombie struct {
 	Position        rl.Vector2
 	Speed           rl.Vector2
@@ -41,12 +51,26 @@ type Zombie struct {
 	LastSwitch      time.Time        // Timer for switching states
 	Health          int              // Health points
     IsAlive         bool             // Whether zombie is alive
+
+	// Sounds
+    ClawSound       rl.Sound
+    HurtSound       rl.Sound
+    DeathSound      rl.Sound
+	IdleSound       rl.Sound
+	IdleSoundCooldown time.Time        // Cooldown timer for idle sound
+
 }
 
 // Initializing  zombie with default settings and load frames for animations
 func InitZombie(x, y float32, zombieType int) Zombie {
 	spriteSheet := rendering.LoadSpriteSheet("assets/sprites/zombiespritesheet1girl_processed.png")
 	spriteSheet2 := rendering.LoadSpriteSheet("assets/sprites/zombiespritesheet2girl_processed.png")
+
+	// Load sounds for zombie actions
+	clawSound := rl.LoadSound("assets/sounds/zombie_attack.mp3")
+	hurtSound := rl.LoadSound("assets/sounds/zombie_hurt.mp3")
+	deathSound := rl.LoadSound("assets/sounds/zombie_death.mp3")
+	idleSound := rl.LoadSound("assets/sounds/zombie_idle.mp3")
 
 	// animation frames
 	idleFrames := []rl.Rectangle{
@@ -96,8 +120,6 @@ func InitZombie(x, y float32, zombieType int) Zombie {
 
 
 
-		
-
 
 	var idleTextures, walkTextures, attackingTextures, hurtTextures, deadTextures []rl.Texture2D
 	for _, frame := range idleFrames {
@@ -132,6 +154,12 @@ func InitZombie(x, y float32, zombieType int) Zombie {
 		DeadFrames:      deadTextures,
 		Health:          100, // Set zombie health
         IsAlive:         true,
+
+		// Assign loaded sounds
+        ClawSound:       clawSound,
+        HurtSound:       hurtSound,
+        DeathSound:      deathSound,
+		IdleSound:       idleSound, // Assign idle sound
 	}
 }
 
@@ -142,8 +170,14 @@ func (z *Zombie) TakeDamage(damage int) {
         z.Health = 0
         z.setState(ZombieDead)
         z.IsAlive = false
+        if !rl.IsSoundPlaying(z.DeathSound) {
+            rl.PlaySound(z.DeathSound)
+        }
     } else {
         z.setState(ZombieHurt)
+        if !rl.IsSoundPlaying(z.HurtSound) {
+            rl.PlaySound(z.HurtSound)
+        }
     }
 }
 
@@ -156,21 +190,46 @@ func (z *Zombie) Update(worldWidth int, playerPosition rl.Vector2) {
         return
     }
 
-    // Checking if the zombie's health has reached zero, setting it to dead if so
-    if z.Health <= 0 && z.IsAlive {
-        z.setState(ZombieDead)
-        z.IsAlive = false // Start death animation but zombie is marked inactive
-        return
-    }
+	// Calculating distance to player for behavior
+	distanceToPlayer := rl.Vector2Distance(z.Position, playerPosition)
 
-    // Calculating distance to player for behavior
-    distanceToPlayer := rl.Vector2Distance(z.Position, playerPosition)
+	if z.State == ZombieAttacking && distanceToPlayer <= attackRange {
+		if !rl.IsSoundPlaying(z.ClawSound) {
+            rl.PlaySound(z.ClawSound)
+        }
+		//stop other sounds
+		rl.StopSound(z.IdleSound)
+		// Reduce player health when attacked
+		if PlayerInstance.Health > 0 {
+			PlayerInstance.Health -= 0.001 // Adjust damage as needed
+			if PlayerInstance.Health <= 0 {
+				PlayerInstance.Health = 0
+				if PlayerInstance.IsGameOver() {
+					fmt.Println("Game Over: Player Health is 0")
+				}
+			}
+		}
+	}
+
+	// Checking if the zombie's health has reached zero, setting it to dead if so
+	if z.Health <= 0 && z.IsAlive {
+		z.setState(ZombieDead)
+		z.IsAlive = false // Start death animation but zombie is marked inactive
+		return
+	}
     if z.IsAlive {
         switch {
         case distanceToPlayer <= attackRange:
             z.setState(ZombieAttacking)
         case distanceToPlayer <= followRange:
             z.setState(ZombieWalking)
+			//print th edistance to player
+			//print the idleSoundProximityRange
+			if distanceToPlayer <= idleSoundProximityRange && !isIdleSoundPlaying && time.Since(lastIdleSoundTime) > idleSoundCooldown {
+                rl.PlaySound(z.IdleSound)
+                lastIdleSoundTime = time.Now() // Reset global cooldown timer
+                isIdleSoundPlaying = true      // Set idle sound as currently playing
+            }
             if playerPosition.X < z.Position.X {
                 z.FacingRight = false
                 z.Speed.X = -0.02 // Slower speed for zombie movement
@@ -185,6 +244,8 @@ func (z *Zombie) Update(worldWidth int, playerPosition rl.Vector2) {
                 if z.State == ZombieIdle {
                     z.setState(ZombieWalking)
                 } else {
+					//play idle sound
+					
                     z.setState(ZombieIdle)
                 }
                 z.LastSwitch = time.Now()
@@ -200,16 +261,34 @@ func (z *Zombie) Update(worldWidth int, playerPosition rl.Vector2) {
             }
         }
     }
+
+	if isIdleSoundPlaying && distanceToPlayer > idleSoundProximityRange {
+        rl.StopSound(z.IdleSound)
+        isIdleSoundPlaying = false
+    }
 }
 
 
 // Helper method to set zombie state and reset frame data
 func (z *Zombie) setState(state ZombieState) {
-	if z.State != state {
-		z.State = state
-		z.CurrentFrame = 0
-		z.FrameCounter = 0
-	}
+    if z.State != state {
+        // Stop sounds as needed
+        if state == ZombieDead {
+            rl.StopSound(z.ClawSound) // Stop attack sound if zombie dies
+			rl.StopSound(z.IdleSound) // Stop idle sound if zombie dies
+        }
+		
+        
+        z.State = state
+        z.CurrentFrame = 0
+        z.FrameCounter = 0
+    }
+}
+func (z *Zombie) UnloadSounds() {
+    rl.UnloadSound(z.ClawSound)
+    rl.UnloadSound(z.HurtSound)
+    rl.UnloadSound(z.DeathSound)
+	rl.UnloadSound(z.IdleSound) 
 }
 
 // Drawing zombie based on the current frame and state
