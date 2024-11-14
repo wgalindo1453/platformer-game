@@ -62,6 +62,14 @@ type Player struct {
 	Health    float64 // Player health
 	MaxHealth float64 // Maximum health to keep track for the health bar
 	Inventory  Inventory
+	HeldItem Item // The currently held item
+}
+func (p *Player) UpdateHeldItem() {
+    if p.Inventory.Slots[p.Inventory.SelectedSlot].Type != Other {
+        p.HeldItem = p.Inventory.Slots[p.Inventory.SelectedSlot]
+    } else {
+        p.HeldItem = Item{} // No item held if slot is empty
+    }
 }
 
 func (p *Player) Shoot() {
@@ -302,7 +310,11 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 	}
 
 	//print inventory
-	fmt.Println("Inventory:", p.Inventory)
+	//if inventory is not empty then print the item inside
+	if ( len(p.Inventory.Slots) != 0){
+		// fmt.Println("Inventory:", p.Inventory)
+
+	}
 
 	// Filter out inactive bullets
 	activeBullets := p.Bullets[:0]
@@ -495,30 +507,30 @@ func (p *Player) Update(worldHeight int, worldWidth int, zombies []*Zombie) {
 	var frames []rl.Texture2D
 	frameDelay := 300
 	switch p.State {
-	case Walking:
-		frames = p.WalkFrames
-	case Running:
-		frames = p.RunFrames
-	case Shooting:
-		frames = p.ShootFrames
-	case Sitting:
-		frames = p.SittingFrames
-	case SittingShooting:
-		frames = p.SittingShootingFrames
-	case Jumping:
-		frames = p.JumpFrames
-		frameDelay = 500
-	case Resting:
-		frames = p.RestingFrames
-		frameDelay = 5000
-	case Sleeping:
-		frames = p.SleepingFrames
-		frameDelay = 5000
-	case Dying:
-		frames = p.DyingFrames
-		frameDelay = 10000
-	default:
-		frames = p.IdleFrames
+		case Walking:
+			frames = p.WalkFrames
+		case Running:
+			frames = p.RunFrames
+		case Shooting:
+			frames = p.ShootFrames
+		case Sitting:
+			frames = p.SittingFrames
+		case SittingShooting:
+			frames = p.SittingShootingFrames
+		case Jumping:
+			frames = p.JumpFrames
+			frameDelay = 500
+		case Resting:
+			frames = p.RestingFrames
+			frameDelay = 5000
+		case Sleeping:
+			frames = p.SleepingFrames
+			frameDelay = 5000
+		case Dying:
+			frames = p.DyingFrames
+			frameDelay = 10000
+		default:
+			frames = p.IdleFrames
 	}
 
 	// Only update frame based on delay
@@ -555,6 +567,12 @@ func (p *Player) Draw() {
 	default:
 		frame = p.IdleFrames[p.CurrentFrame]
 	}
+
+	if p.HeldItem.Type != Other && p.HeldItem.Image.ID != 0 {
+        heldX := p.Position.X  -10 // Adjust for desired position relative to player
+        heldY := p.Position.Y - 10 // Adjust for desired position relative to player
+        rl.DrawTextureEx(p.HeldItem.Image, rl.Vector2{X: heldX, Y: heldY}, 0, 0.5, rl.White) // Scale to desired size
+    }
 
 	// Source rectangle starts normally
 	sourceRect := rl.Rectangle{X: 0, Y: 0, Width: float32(frame.Width), Height: float32(frame.Height)}

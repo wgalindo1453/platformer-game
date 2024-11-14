@@ -1,7 +1,7 @@
 package gameobjects
 
 import (
-	"fmt"
+	
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -23,6 +23,6 @@ func NewWorldItem(x, y float32, itemType ItemType, name string, texturePath stri
 }
 
 func (item *WorldItem) Draw() {
-    fmt.Println("Drawing item:", item.Name, "at position:", item.Position)
+    // fmt.Println("Drawing item:", item.Name, "at position:", item.Position)
     rl.DrawTexture(item.Texture, int32(item.Position.X), int32(item.Position.Y), rl.White)
 }

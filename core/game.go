@@ -70,12 +70,41 @@ func initZombies(numZombies int) {
 }
 
 func UpdateGame(worldHeight int) {
+	gameobjects.PlayerInstance.Inventory.UpdateSelection()
 
 	// Toggle inventory display with 'I' key
 	if rl.IsKeyPressed(rl.KeyI) {
 		gameobjects.PlayerInstance.Inventory.IsOpen = !gameobjects.PlayerInstance.Inventory.IsOpen
 	}
 
+	gameobjects.PlayerInstance.UpdateHeldItem()
+	// Check for item pickup with "E" key
+    if rl.IsKeyPressed(rl.KeyE) {
+        playerPosition := gameobjects.PlayerInstance.Position
+        itemPosition := testItem.Position
+        distance := rl.Vector2Distance(playerPosition, itemPosition)
+
+        // If within range, try adding item to inventory
+        if distance < 50 { // Adjust as needed
+            item := gameobjects.Item{
+                Type:  testItem.Type,
+                Name:  testItem.Name,
+                Image: testItem.Texture,
+            }
+            if gameobjects.PlayerInstance.Inventory.AddItem(item) {
+                fmt.Println("Item added to inventory:", testItem.Name)
+                testItem.Texture.ID = 0 // Remove from game world
+            } else {
+                fmt.Println("Inventory is full!")
+            }
+
+            // Debug: Print out inventory contents
+            fmt.Println("Current Inventory:")
+            for i, slot := range gameobjects.PlayerInstance.Inventory.Slots {
+                fmt.Printf("Slot %d: %s\n", i, slot.Name)
+            }
+        }
+    }
 	
 	// Updating player and call Shoot to check for zombie hits
 	gameobjects.PlayerInstance.Update(worldHeight, worldWidth, zombies)
@@ -144,11 +173,11 @@ func DrawGame() {
 	rl.EndMode2D()
 
 	// Draw inventory if open
-	if gameobjects.PlayerInstance.Inventory.IsOpen {
-		DrawInventory(&gameobjects.PlayerInstance.Inventory)
-	}
+    if gameobjects.PlayerInstance.Inventory.IsOpen {
+        gameobjects.PlayerInstance.Inventory.DrawInventory()
+    }
 
-	// Draw the item in the game world
+	// Draw the item in the game world only if it's not picked up
 	if testItem.Texture.ID != 0 {
 		testItem.Draw()
 	}
@@ -160,23 +189,7 @@ func DrawGame() {
 	rl.EndDrawing()
 }
 
-// DrawInventory renders the inventory on the screen
-func DrawInventory(inv *gameobjects.Inventory) {
-	invX, invY := 100, 100 // Position of the inventory on the screen
-	slotSize := 50
-	padding := 10
 
-	for i, item := range inv.Slots {
-		x := invX + (i % 5) * (slotSize + padding) // Arrange items in a grid
-		y := invY + (i / 5) * (slotSize + padding)
-		rl.DrawRectangle(int32(x), int32(y), int32(slotSize), int32(slotSize), rl.Gray)
-
-		if item.Type != gameobjects.Other {
-			// Draw item icon
-			rl.DrawTexture(item.Image, int32(x), int32(y), rl.White)
-		}
-	}
-}
 
 func DrawPlayerHealthBar() {
 	player := &gameobjects.PlayerInstance
